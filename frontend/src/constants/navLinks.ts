@@ -1,8 +1,10 @@
-const links = [
+export const links = [
   {
     text: "Home",
     link: "/",
   },
+  {
+    text: "About",
+    link: "/about",
+  },
 ];
-
-export default { links };
