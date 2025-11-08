@@ -8,7 +8,9 @@ pnpm-debug.log*
 lerna-debug.log*
 
 # Dependency directories
-node_modules
+node_modules/
+.vite/
+dist/
 
 # Build output
 dist
