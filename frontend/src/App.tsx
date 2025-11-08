@@ -13,7 +13,7 @@ gsap.registerPlugin(ScrollTrigger);
 
   return (
     <Router>
-      <NavBar />
+      {/* <NavBar /> */}
       <Routes>
         <Route path="/" element={<LandingScreen />} />
         <Route path="/login" element={<Login/>} />
