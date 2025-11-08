@@ -6,6 +6,7 @@ import Login from "./Screens/Login";
 import Register from "./Screens/Register";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
+import MapView from "./components/map/MapView";
 
 const App = () => {
 
@@ -18,8 +19,11 @@ gsap.registerPlugin(ScrollTrigger);
         <Route path="/" element={<LandingScreen />} />
         <Route path="/login" element={<Login/>} />
         <Route path="/register" element={<Register/>} />
-      </Routes>
-    </Router>
+        <Route path="/map" element={<MapView/>} />
+        
+    </Routes>
+      </Router>
+    //   <MapView/>
   );
 };
 
