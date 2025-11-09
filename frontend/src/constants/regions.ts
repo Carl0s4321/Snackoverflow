@@ -1,0 +1,23 @@
+export const regions = [
+    { name: "Bridgeland", neighborhood: "Bridgeland-Riverside", location: "NE" },
+    { name: "Crescent Heights", neighborhood: "Crescent Heights", location: "NW" },
+    { name: "Beltline", neighborhood: "Beltline", location: "SW" },
+    { name: "Mission", neighborhood: "Mission", location: "SW" },
+    { name: "Hillhurst", neighborhood: "Hillhurst", location: "NW" },
+    { name: "Kensington", neighborhood: "West Hillhurst / Kensington", location: "NW" },
+    { name: "Sunnyside", neighborhood: "Sunnyside", location: "NW" },
+    { name: "Inglewood", neighborhood: "Inglewood", location: "SE" },
+    { name: "Altadore", neighborhood: "Altadore", location: "SW" },
+    { name: "Marda Loop", neighborhood: "South Calgary / Marda Loop", location: "SW" },
+    { name: "Eau Claire", neighborhood: "Eau Claire", location: "SW" },
+    { name: "Bowness", neighborhood: "Bowness", location: "NW" },
+    { name: "Varsity", neighborhood: "Varsity", location: "NW" },
+    { name: "Tuscany", neighborhood: "Tuscany", location: "NW" },
+    { name: "Marlborough", neighborhood: "Marlborough", location: "NE" },
+    { name: "Rundle", neighborhood: "Rundle", location: "NE" },
+    { name: "Forest Lawn", neighborhood: "Forest Lawn", location: "SE" },
+    { name: "Seton", neighborhood: "Seton", location: "SE" },
+    { name: "Auburn Bay", neighborhood: "Auburn Bay", location: "SE" },
+    { name: "Copperfield", neighborhood: "Copperfield", location: "SE" },
+  ];
+  

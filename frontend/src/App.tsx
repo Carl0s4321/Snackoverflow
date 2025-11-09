@@ -8,7 +8,7 @@ import AuthPage from "./Screens/AuthScreen";
 import MapView from "./components/map/MapView";
 
 const App = () => {
-  gsap.registerPlugin(ScrollTrigger);
+  // gsap.registerPlugin(ScrollTrigger);
 
   return (
     <Router>
