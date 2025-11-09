@@ -31,9 +31,9 @@ const MapView: FC = () => {
       container: mapContainer.current,
       style: "mapbox://styles/mapbox/outdoors-v12",
       center: DEFAULT_CENTER,
-      zoom: 11,
-      minZoom: 9,
-      maxZoom: 15,
+      zoom: 8, // More zoomed out view
+      minZoom: 2,
+      maxZoom: 20,
       maxBounds: CITY_BOUNDS,
     });
 
@@ -72,7 +72,7 @@ const MapView: FC = () => {
           },
         });
 
-        // On click: show popup with name and centroid
+        // On click: send data to Flask (no popup)
         map.on("click", "communities-fill", async (e) => {
           const feature = e.features?.[0];
           if (!feature) return;
@@ -94,42 +94,33 @@ const MapView: FC = () => {
             coordinates = geometry.coordinates[0][0];
           }
 
+          // Calculate centroid
           const centroid = coordinates
             .reduce(
               (acc, [lon, lat]) => [acc[0] + lon, acc[1] + lat],
               [0, 0]
             )
-                .map((sum) => sum / coordinates.length);
-            
+            .map((sum) => sum / coordinates.length);
 
+          // Create payload
           const payload = {
             name,
             centroid: { lat: centroid[1], lon: centroid[0] },
-            // coordinates, 
-            };
-            
-            try {
-    const response = await fetch("http://127.0.0.1:5000/api/community", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    });
+          };
 
-    const result = await response.json();
-    console.log("Flask response:", result);
-  } catch (error) {
-    console.error("Error sending data to backend:", error);
-  }
+          // Send to Flask backend
+          try {
+            const response = await fetch("http://127.0.0.1:5000/api/community", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(payload),
+            });
 
-          new mapboxgl.Popup()
-            .setLngLat(centroid as [number, number])
-            .setHTML(`
-              <strong>${name}</strong><br/>
-              Lat: ${centroid[1].toFixed(5)}, Lon: ${centroid[0].toFixed(5)}
-            `)
-            .addTo(map);
+            const result = await response.json();
+            console.log("Flask response:", result);
+          } catch (error) {
+            console.error("Error sending data to backend:", error);
+          }
         });
 
         map.on("mouseenter", "communities-fill", () => {
@@ -155,17 +146,6 @@ const MapView: FC = () => {
 
   return (
     <div className="relative h-[100dvh] w-full bg-slate-900 text-white sm:h-screen">
-      <div className="absolute left-1/2 top-3 z-20 flex w-[94%] max-w-4xl -translate-x-1/2 flex-col gap-2 rounded-2xl bg-slate-900/85 p-4 text-sm shadow-lg backdrop-blur-sm sm:top-4">
-        <p className="text-base font-semibold text-white sm:text-lg">
-          Calgary Community Map
-        </p>
-        <p className="text-xs text-slate-300">
-          Click a community to view its location.
-        </p>
-        {statusMessage && (
-          <p className="text-cyan-400 text-xs mt-1">{statusMessage}</p>
-        )}
-      </div>
 
       <div ref={mapContainer} className="h-full w-full" />
     </div>
