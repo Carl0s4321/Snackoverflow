@@ -20,7 +20,7 @@ WEIGHTS = {
     "air_quality": 0.60,  # 60% weight for Air Quality
     "weather_rating": 0.40, # 40% weight for Weather Rating
 }
-
+#hello
 # Ensure weights sum to 1.0 (simple check)
 if abs(sum(WEIGHTS.values()) - 1.0) > 0.001:
     raise ValueError("The weights in the WEIGHTS dictionary must sum to 1.0.")
