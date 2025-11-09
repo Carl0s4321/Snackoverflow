@@ -8,6 +8,10 @@ html {
 	box-sizing: border-box;
 }
 
+button{
+  cursor: pointer;
+}
+
 
 /*  ------------------ Map PopUp CSS ------------------- */
 .mapboxgl-popup-content {
@@ -45,11 +49,11 @@ img {
   object-fit: cover;
 }
 
-p {
+.overlay p {
   text-transform: uppercase;
   font-size: 0.7rem;
 }
-a {
+.overlay a {
   text-decoration: none;
   text-transform: uppercase;
   font-size: 0.7rem;
@@ -146,7 +150,7 @@ a {
   gap: 1em;
 }
 
-.img {
+.overlay .img {
   position: relative;
   flex: 1;
   aspect-ratio: 1;

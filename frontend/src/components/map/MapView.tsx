@@ -1,8 +1,10 @@
 import type { ChangeEvent, FC, FormEvent } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import mapboxgl from "mapbox-gl";
+import mapboxgl, { Marker, type GeoJSONFeature } from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { useUserStore } from "../../stores/userStore";
+import type { Pin } from "../types/types";
+import Sidebar from "../Sidebar";
 
 const DEFAULT_CENTER: [number, number] = [-114.0719, 51.0447];
 const CITY_BOUNDS: [mapboxgl.LngLatLike, mapboxgl.LngLatLike] = [
@@ -48,6 +50,9 @@ export const mockPins = [
 
 const MapView: FC = () => {
   const { user, fetchUser } = useUserStore();
+
+  const [selectedPin, setSelectedPin] = useState<Pin | GeoJSONFeature | null>(null);
+
   useEffect(() => {
     fetchUser();
   }, []);
@@ -146,9 +151,31 @@ const MapView: FC = () => {
           },
         });
 
+        // PINSSSS
+        mockPins.forEach((pin) => {
+          const marker = new mapboxgl.Marker({
+            color: pin.type === "park" ? "green" : "red",
+          })
+            .setLngLat(pin.coordinates as any)
+            .addTo(map);
+
+          marker.getElement().addEventListener("click", () => {
+            map.flyTo({
+              center: pin.coordinates as any,
+              zoom: 14,
+              speed: 1.2,
+              curve: 1.4,
+            });
+
+            setSelectedPin(pin);
+          });
+        });
+
+        // On click: show popup with name and centroid
         map.on("click", "communities-fill", async (e) => {
           const feature = e.features?.[0];
           if (!feature) return;
+          
 
           const props = feature.properties || {};
           const name =
@@ -348,6 +375,13 @@ const MapView: FC = () => {
           <p className="mt-1 text-xs text-slate-500">Map: {statusMessage}</p>
         )}
       </div>
+
+      <Sidebar
+        pin={selectedPin}
+        onClose={() => {
+          setSelectedPin(null);
+        }}
+      />
       <div ref={mapContainer} className="h-full w-full" />
     </div>
   );

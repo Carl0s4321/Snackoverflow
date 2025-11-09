@@ -4,9 +4,9 @@
   "description": "Full-stack project with Flask, Node, and React",
   "main": "index.js",
   "scripts": {
-    "dev": "concurrently \"npm run flask\" \"npm run client\"",
+    "dev": "concurrently \"npm run server\" \"npm run client\"",
     "flask": "cd backend-flask && flask run",
-    "server": "cd backend-node && npm run dev",
+    "server": "cd backend/Server && python app.py",
     "client": "cd frontend && npm run dev",
     "install-all": "npm install && cd backend-node && npm install || echo 'No Node backend found' && cd ../frontend && npm install && cd ../backend-flask && python -m venv venv && . venv/bin/activate && pip install -r requirements.txt && cd ..",
     "build": "cd frontend && npm run build",
