@@ -11,6 +11,7 @@ const CITY_BOUNDS: [mapboxgl.LngLatLike, mapboxgl.LngLatLike] = [
 
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN ?? "";
 
+// This is a url
 const COMMUNITY_DATA_URL =
   "https://data.calgary.ca/resource/surr-xmvs.geojson";
 
