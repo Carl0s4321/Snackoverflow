@@ -42,6 +42,76 @@ class WeatherService:
         except requests.RequestException as e:
             raise Exception(f"Failed to fetch weather data: {str(e)}")
 
+    def get_weather_description(self, weather_data: Dict) -> str:
+        """
+        Generate a human-readable description of the current weather conditions.
+
+        Args:
+            weather_data: Weather data dictionary from the API
+
+        Returns:
+            A descriptive string of the weather conditions
+        """
+        parameters = weather_data.get("parameters", {})
+
+        # Extract weather parameters
+        temperature = parameters.get("temperature", {}).get("value")
+        weather_condition = parameters.get("weather_condition", {}).get("value")
+        cloud_cover = parameters.get("cloud_cover", {}).get("value")
+        wind_speed = parameters.get("wind_speed", {}).get("value")
+
+        # Build description parts
+        description_parts = []
+
+        # Weather condition (e.g., clear, cloudy, rainy)
+        if weather_condition:
+            condition_text = weather_condition.lower()
+            description_parts.append(f"It is {condition_text}")
+        elif cloud_cover is not None:
+            # Fallback to cloud cover if weather condition is not available
+            if cloud_cover < 20:
+                description_parts.append("It is clear")
+            elif cloud_cover < 50:
+                description_parts.append("It is partly cloudy")
+            elif cloud_cover < 80:
+                description_parts.append("It is mostly cloudy")
+            else:
+                description_parts.append("It is overcast")
+
+        # Temperature description
+        if temperature is not None:
+            if temperature < 0:
+                temp_desc = "freezing"
+            elif temperature < 10:
+                temp_desc = "cold"
+            elif temperature < 20:
+                temp_desc = "cool"
+            elif temperature < 28:
+                temp_desc = "pleasant"
+            elif temperature < 35:
+                temp_desc = "warm"
+            else:
+                temp_desc = "hot"
+            description_parts.append(f"and {temp_desc} ({temperature}°C)")
+
+        # Wind description
+        if wind_speed is not None:
+            if wind_speed < 5:
+                wind_desc = "calm"
+            elif wind_speed < 15:
+                wind_desc = "breezy"
+            elif wind_speed < 25:
+                wind_desc = "windy"
+            else:
+                wind_desc = "very windy"
+            description_parts.append(f"with {wind_desc} conditions")
+
+        # Join all parts
+        if description_parts:
+            return " ".join(description_parts) + "."
+        else:
+            return "Weather data unavailable."
+
     def calculate_weather_rating(self, weather_data: Dict) -> float:
         """
         Calculate a weather rating out of 10 based on temperature deviation from optimal (25�C).
@@ -88,14 +158,16 @@ class WeatherService:
             lng: Longitude coordinate
 
         Returns:
-            Dictionary containing weather data and calculated rating
+            Dictionary containing weather data, calculated rating, and description
         """
         weather_data = self.get_current_weather(lat, lng)
         rating = self.calculate_weather_rating(weather_data)
+        description = self.get_weather_description(weather_data)
 
         return {
             'weather_data': weather_data,
             'rating': rating,
+            'description': description,
             'temperature': weather_data.get('parameters', {}).get('temperature', {}).get('value'),
             'optimal_temperature': self.OPTIMAL_TEMP
         }
@@ -119,9 +191,16 @@ if __name__ == "__main__":
         rating = weather_service.calculate_weather_rating(weather_data)
         print(f"Weather Rating: {rating}/10")
 
-        # Or get both at once
+        # Get weather description
+        description = weather_service.get_weather_description(weather_data)
+        print(f"Weather Description: {description}")
+
+        # Or get everything at once
         result = weather_service.get_weather_with_rating(lat, lng)
-        print(f"\nCombined Result: {result}")
+        print(f"\nCombined Result:")
+        print(f"  Rating: {result['rating']}/10")
+        print(f"  Description: {result['description']}")
+        print(f"  Temperature: {result['temperature']}°C")
 
     except Exception as e:
         print(f"Error: {e}")
