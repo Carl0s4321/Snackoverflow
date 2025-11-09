@@ -1,7 +1,3 @@
-# ======================================================================
-# app.py — Full Working Version (SnackOverflow Backend)
-# ======================================================================
-
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 from pymongo import MongoClient
@@ -285,4 +281,8 @@ def serve_image(filename):
 # ======================================================================
 
 if __name__ == "__main__":
+    # Create the images directory if it doesn't exist (needed for upload_photo)
+    if not os.path.exists(IMAGES_DIR):
+        os.makedirs(IMAGES_DIR)
+        
     app.run(port=5000, debug=True)
