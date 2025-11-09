@@ -8,6 +8,10 @@ import requests
 from time import sleep # Retained, though not used in the simplified fetchers
 from typing import Dict, Optional, Tuple, Any
 
+from flask_bcrypt import Bcrypt
+from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
+
+
 # Import the schema for report validation (Assumes reports_schema.py is in the same directory)
 from reports_schema import REPORT_SCHEMA, ALL_CATEGORIES
 
@@ -34,6 +38,7 @@ load_dotenv()
 API_KEY = os.getenv('MEERSENS_API_KEY')
 if not API_KEY:
     print("WARNING: MEERSENS_API_KEY is not set. API calls will likely fail.")
+JWT_KEY = os.getenv('JWT_SECRET')
 
 # ==============================================================================
 # 1. FLASK AND MONGODB SETUP
@@ -42,21 +47,35 @@ if not API_KEY:
 app = Flask(__name__)
 CORS(app)
 
+
+app.config["JWT_SECRET_KEY"] = JWT_KEY  # use .env in prod
+jwt = JWTManager(app)
+bcrypt = Bcrypt(app)
+
+
 mongo_uri = os.getenv("MONGO_URI")
 try:
     client = MongoClient(mongo_uri, tlsCAFile=certifi.where())
     db = client["welivehere"]
     # Use the 'reports' collection for submissions
     collection = db["reports"]
+    usersCollection = db["users"]
     print("INFO: MongoDB connection established (Collection: reports).")
 except Exception as e:
     print(f"ERROR: Failed to connect to MongoDB: {e}")
     client = None
     collection = None
+    usersCollection = None
 
 # ==============================================================================
 # 2. VALIDATION UTILITY
 # ==============================================================================
+
+def validate_user_register(data):
+    user = usersCollection.find_one({"username": data.get("username")})
+    if user:
+        return "Username found"
+    # MAKE OTHER IDK
 
 def _validate_report_data(data: Dict) -> Optional[str]:
     """Validates incoming report data against the REPORT_SCHEMA."""
@@ -281,6 +300,57 @@ def calculate_city_quality_score(lat: float, lng: float) -> Dict[str, Any]:
 def home():
     print("DEBUG: Hit / route.")
     return jsonify({"message": "Flask backend running and connected to MongoDB"})
+
+@app.route("/api/register", methods=["POST"])
+def register():
+    data = request.json
+
+    # TODO
+    validation_error = validate_user_register(data)
+    if validation_error:
+        print(f"ERROR: Validation failed: {validation_error}")
+        return jsonify({"error": "Invalid report data format", "details": validation_error}), 400
+
+    password_hash = bcrypt.generate_password_hash(data["password"]).decode("utf-8")
+
+    user = {
+        "username": data["username"], 
+        "password": password_hash,
+        "status": "user"
+    }
+
+    usersCollection.insert_one(user)
+    return jsonify({"msg": "User created"}), 201
+
+@app.route("/api/login", methods=["POST"])
+def login():
+    data = request.json
+    username = data.get("username")
+    password = data.get("password")
+
+    user = usersCollection.find_one({"username": username})
+    if not user:
+        return jsonify({"error": "Invalid username or password"}), 400
+    
+    if not bcrypt.check_password_hash(user["password"], password):
+        return jsonify({"error": "Invalid username or password"}), 400
+
+    access_token = create_access_token(identity={
+        "username": user["username"],
+        "status": user.get("status", "user")
+    })
+
+    return jsonify({"access_token": access_token})
+
+@app.route("/api/me", methods=["GET"])
+@jwt_required()
+def me():
+    pass
+
+@app.route("/api/users", methods=["GET"])
+def get_users():
+    data = list(usersCollection.find({}, {"_id": 0}))
+    return jsonify(data)
 
 @app.route("/api/reports", methods=["GET"])
 def get_submissions():

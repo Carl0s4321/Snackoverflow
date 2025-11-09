@@ -1,11 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import gsap from "gsap";
 import { Link, useParams, useNavigate } from "react-router-dom";
+import { useUserStore } from "../stores/userStore";
 
 export default function AuthPage() {
   let { type } = useParams();
   const [isLogin, setIsLogin] = useState(type === "login" ? true : false);
   const navigate = useNavigate();
+  const { login } = useUserStore();
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
 
   const formRef = useRef(null);
 
@@ -29,10 +33,10 @@ export default function AuthPage() {
         </h2>
 
         <form
-          onSubmit={(e) => {
+          onSubmit={async (e) => {
             e.preventDefault();
-            // perform login/register logic
-            localStorage.setItem("isLoggedIn", "true");
+            await login(username, password);
+
             navigate("/map");
           }}
           ref={formRef}
@@ -55,6 +59,8 @@ export default function AuthPage() {
               type="email"
               placeholder="example@mail.com"
               className="mt-1 block w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-gray-600"
+              value={username}
+              onChange={(e)=> setUsername(e.target.value.trim())}
             />
           </div>
 
@@ -64,6 +70,8 @@ export default function AuthPage() {
               type="password"
               placeholder="********"
               className="mt-1 block w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-gray-600"
+              value={password}
+              onChange={(e)=> setPassword(e.target.value.trim())}
             />
           </div>
 
