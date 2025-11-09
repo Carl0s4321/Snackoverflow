@@ -5,8 +5,8 @@ import { Link, useParams, useNavigate } from "react-router-dom";
 export default function AuthPage() {
   let { type } = useParams();
   const [isLogin, setIsLogin] = useState(type === "login" ? true : false);
-  const navigate = useNavigate()
-  
+  const navigate = useNavigate();
+
   const formRef = useRef(null);
 
   useEffect(() => {
@@ -53,8 +53,7 @@ export default function AuthPage() {
             <input
               type="email"
               placeholder="example@mail.com"
-              
-                className="mt-1 block w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-gray-600"
+              className="mt-1 block w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-gray-600"
             />
           </div>
 
@@ -63,7 +62,7 @@ export default function AuthPage() {
             <input
               type="password"
               placeholder="********"
-                className="mt-1 block w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-gray-600"
+              className="mt-1 block w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-gray-600"
             />
           </div>
 
