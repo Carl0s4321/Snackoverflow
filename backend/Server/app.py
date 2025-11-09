@@ -5,11 +5,10 @@ import os
 from dotenv import load_dotenv
 import certifi
 import requests
-from time import sleep # Retained, though not used in the simplified fetchers
 from typing import Dict, Optional, Tuple, Any
 
 from flask_bcrypt import Bcrypt
-from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
+from flask_jwt_extended import JWTManager, create_access_token, jwt_required
 
 
 # Import the schema for report validation (Assumes reports_schema.py is in the same directory)
