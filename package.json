@@ -29,10 +29,20 @@
     "url": "https://github.com/Carl0s4321/Snackoverflow/issues"
   },
   "homepage": "https://github.com/Carl0s4321/Snackoverflow#readme",
+
   "devDependencies": {
+    "@tailwindcss/vite": "^4.1.17",
+    "@types/react": "^19.2.2",
+    "@vitejs/plugin-react": "^5.1.0",
     "concurrently": "^9.2.1"
   },
   "dependencies": {
+    "gsap": "^3.13.0",
+    "jwt-decode": "^4.0.0",
+    "mapbox-gl": "^3.16.0",
+    "plugin-react": "^0.0.1-security",
+    "react-webcam": "^7.2.0",
+    "split-type": "^0.3.4",
     "vite": "^7.2.2"
   }
 }
