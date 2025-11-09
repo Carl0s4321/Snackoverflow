@@ -1,16 +1,17 @@
 import type { FC, FormEvent } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import Webcam from "react-webcam";
 
 type Props = {
   statusMessage?: string | null;
+  onSubmitted?: () => void;
+  onClose?: () => void;
 };
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:5000";
 
-const ReportForm: FC<Props> = ({ statusMessage }) => {
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
+const ReportForm: FC<Props> = ({ statusMessage, onSubmitted, onClose }) => {
+  const webcamRef = useRef<Webcam>(null);
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -52,102 +53,38 @@ const ReportForm: FC<Props> = ({ statusMessage }) => {
     requestLocation();
   }, [requestLocation]);
 
-  useEffect(() => {
-    if (!navigator.mediaDevices?.getUserMedia) {
-      setStreamError("Webcam access is not supported on this device.");
-      return;
-    }
-
-    let isMounted = true;
-
-    const startStream = async () => {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: "environment" },
-        });
-        if (!isMounted) {
-          stream.getTracks().forEach((track) => track.stop());
-          return;
-        }
-        streamRef.current = stream;
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          videoRef.current
-            .play()
-            .catch(() =>
-              setStreamError("Camera ready, press Capture when you see yourself.")
-            );
-        }
-      } catch (error) {
-        console.error("Webcam error:", error);
-        setStreamError(
-          "Unable to access webcam. Please allow camera permissions."
-        );
-      }
-    };
-
-    startStream();
-
-    return () => {
-      isMounted = false;
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach((track) => track.stop());
-        streamRef.current = null;
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (capturePreview) {
-        URL.revokeObjectURL(capturePreview);
-      }
-    };
-  }, [capturePreview]);
-
   const capturePhoto = useCallback(() => {
-    if (!videoRef.current || !canvasRef.current) {
+    if (!webcamRef.current) {
       setMessage("Camera is not ready yet.");
       return;
     }
 
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
-    canvas.width = video.videoWidth || 640;
-    canvas.height = video.videoHeight || 480;
-    const context = canvas.getContext("2d");
-
-    if (!context) {
-      setMessage("Unable to capture image from webcam.");
+    const screenshot = webcamRef.current.getScreenshot();
+    if (!screenshot) {
+      setMessage("Failed to capture photo.");
       return;
     }
 
-    context.drawImage(video, 0, 0, canvas.width, canvas.height);
-    canvas.toBlob(
-      (blob) => {
-        if (!blob) {
-          setMessage("Failed to capture photo.");
-          return;
-        }
-        const nextUrl = URL.createObjectURL(blob);
-        setCapturedBlob(blob);
-        setCapturePreview((prev) => {
-          if (prev) URL.revokeObjectURL(prev);
-          return nextUrl;
-        });
-        setMessage("Snapshot ready to submit.");
-      },
-      "image/jpeg",
-      0.92
-    );
+    const blob = (() => {
+      const [meta, data] = screenshot.split(",");
+      const mime = meta.match(/:(.*?);/)?.[1] ?? "image/jpeg";
+      const binary = atob(data);
+      const len = binary.length;
+      const buffer = new Uint8Array(len);
+      for (let i = 0; i < len; i += 1) {
+        buffer[i] = binary.charCodeAt(i);
+      }
+      return new Blob([buffer], { type: mime });
+    })();
+
+    setCapturedBlob(blob);
+    setCapturePreview(screenshot);
+    setMessage("Snapshot ready to submit.");
   }, []);
 
   const clearCapture = () => {
     setCapturedBlob(null);
-    setCapturePreview((prev) => {
-      if (prev) URL.revokeObjectURL(prev);
-      return null;
-    });
+    setCapturePreview(null);
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -199,6 +136,7 @@ const ReportForm: FC<Props> = ({ statusMessage }) => {
       setDescription("");
       clearCapture();
       requestLocation();
+      onSubmitted?.();
     } catch (error) {
       const errMessage =
         error instanceof Error ? error.message : "Something went wrong.";
@@ -210,7 +148,17 @@ const ReportForm: FC<Props> = ({ statusMessage }) => {
 
   return (
     <>
-      <div className="rounded-2xl border border-white/20 bg-white/95 p-4 text-slate-900 shadow-2xl backdrop-blur">
+      <div className="relative rounded-2xl border border-white/20 bg-white/95 p-4 text-slate-900 shadow-2xl backdrop-blur">
+        {onClose && (
+          <button
+            type="button"
+            aria-label="Close report form"
+            onClick={onClose}
+            className="absolute right-3 top-3 rounded-full bg-slate-200 px-3 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-300"
+          >
+            ×
+          </button>
+        )}
         <h2 className="text-lg font-semibold">Create a live report</h2>
         <p className="text-sm text-slate-600">
           Capture a frame with your webcam, describe the issue, and we will store
@@ -268,12 +216,21 @@ const ReportForm: FC<Props> = ({ statusMessage }) => {
               Webcam snapshot
             </label>
             <div className="mt-2 overflow-hidden rounded-xl border border-slate-200 bg-black">
-              <video
-                ref={videoRef}
+              <Webcam
+                ref={webcamRef}
                 className="h-56 w-full object-cover"
-                autoPlay
-                playsInline
-                muted
+                audio={false}
+                screenshotFormat="image/jpeg"
+                videoConstraints={{ facingMode: "environment" }}
+                onUserMedia={() => setStreamError(null)}
+                onUserMediaError={(error) =>
+                  setStreamError(
+                    typeof error === "string"
+                      ? error
+                      : error?.message ||
+                          "Unable to access webcam. Please allow camera permissions."
+                  )
+                }
               />
             </div>
             {capturePreview && (
@@ -323,7 +280,6 @@ const ReportForm: FC<Props> = ({ statusMessage }) => {
         )}
       </div>
 
-      <canvas ref={canvasRef} className="hidden" />
     </>
   );
 };

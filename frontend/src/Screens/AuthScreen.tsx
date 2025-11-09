@@ -32,6 +32,7 @@ export default function AuthPage() {
           onSubmit={(e) => {
             e.preventDefault();
             // perform login/register logic
+            localStorage.setItem("isLoggedIn", "true");
             navigate("/map");
           }}
           ref={formRef}

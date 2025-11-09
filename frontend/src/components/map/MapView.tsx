@@ -1,8 +1,11 @@
 import type { FC } from "react";
 import { useEffect, useRef, useState } from "react";
-import mapboxgl from "mapbox-gl";
+import mapboxgl, { type GeoJSONFeature } from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import ReportForm from "../reports/ReportForm";
+import { useUserStore } from "../../stores/userStore";
+import Sidebar from "../Sidebar";
+import type { Pin } from "../types/types";
 
 const DEFAULT_CENTER: [number, number] = [-114.0719, 51.0447];
 const CITY_BOUNDS: [mapboxgl.LngLatLike, mapboxgl.LngLatLike] = [
@@ -49,14 +52,21 @@ export const mockPins = [
 const MapView: FC = () => {
   const { user, fetchUser } = useUserStore();
 
-  const [selectedPin, setSelectedPin] = useState<Pin | GeoJSONFeature | null>(null);
+  const [selectedPin, setSelectedPin] =
+    useState<Pin | GeoJSONFeature | null>(null);
+  const [showReportForm, setShowReportForm] = useState(false);
 
   useEffect(() => {
     fetchUser();
   }, []);
 
-  const isAdmin = user?.status === "admin";
-  console.log("isAdmin", isAdmin);
+  const isLoggedIn = Boolean(user);
+
+  useEffect(() => {
+    if (!isLoggedIn) {
+      setShowReportForm(false);
+    }
+  }, [isLoggedIn]);
 
   const mapContainer = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
@@ -204,16 +214,37 @@ const MapView: FC = () => {
 
   return (
     <div className="relative h-[100dvh] w-full bg-slate-900 text-white sm:h-screen">
-      <div className="absolute left-4 top-4 z-10 w-full max-w-sm">
-        <ReportForm statusMessage={statusMessage} />
-      </div>
+      {showReportForm && (
+        <div className="absolute inset-0 z-20 flex items-center justify-center bg-slate-900/70 px-4">
+          <div className="w-full max-w-xl">
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setShowReportForm(false)}
+                className="absolute -right-3 -top-3 rounded-full bg-slate-900 px-3 py-1 text-sm font-semibold text-white shadow"
+              >
+                Close
+              </button>
+              <ReportForm
+                statusMessage={statusMessage}
+                onSubmitted={() => setShowReportForm(false)}
+                onClose={() => setShowReportForm(false)}
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
-      <Sidebar
-        pin={selectedPin}
-        onClose={() => {
-          setSelectedPin(null);
-        }}
-      />
+      {selectedPin && (
+        <Sidebar
+          pin={selectedPin}
+          onClose={() => {
+            setSelectedPin(null);
+          }}
+          showReportButton={isLoggedIn}
+          onOpenReport={() => setShowReportForm(true)}
+        />
+      )}
       <div ref={mapContainer} className="h-full w-full" />
     </div>
   );
