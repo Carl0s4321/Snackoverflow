@@ -41,5 +41,5 @@ package-lock.json
 # Environment Variables
 venv/
 __pycache__/
-backend/.env
+backend/.env.example
 frontend/.env
