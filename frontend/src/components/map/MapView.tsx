@@ -39,16 +39,18 @@ const MapView: FC = () => {
 
     map.addControl(new mapboxgl.NavigationControl(), "bottom-right");
 
-    // Wait for the map style to finish loading
     map.on("load", async () => {
       try {
-        // Add GeoJSON source
+        // Fetch and load GeoJSON data
+        const res = await fetch(COMMUNITY_DATA_URL);
+        const data = await res.json();
+
         map.addSource("calgary-communities", {
           type: "geojson",
-          data: COMMUNITY_DATA_URL,
+          data,
         });
 
-        // Add fill layer
+        // Fill layer for communities
         map.addLayer({
           id: "communities-fill",
           type: "fill",
@@ -59,7 +61,7 @@ const MapView: FC = () => {
           },
         });
 
-        // Add outline layer
+        // Outline layer
         map.addLayer({
           id: "communities-outline",
           type: "line",
@@ -70,26 +72,66 @@ const MapView: FC = () => {
           },
         });
 
-        // Click handler to show popup
-        map.on("click", "communities-fill", (e) => {
+        // On click: show popup with name and centroid
+        map.on("click", "communities-fill", async (e) => {
           const feature = e.features?.[0];
           if (!feature) return;
 
-          // The property names differ — inspect them first in console if undefined
           const props = feature.properties || {};
           const name =
+            props.name ||
             props.CommunityDistrict ||
             props.community ||
-            props.name ||
+            props.community_name ||
             "Unknown Community";
 
+          const geometry = feature.geometry;
+          let coordinates: number[][] = [];
+
+          if (geometry.type === "Polygon") {
+            coordinates = geometry.coordinates[0];
+          } else if (geometry.type === "MultiPolygon") {
+            coordinates = geometry.coordinates[0][0];
+          }
+
+          const centroid = coordinates
+            .reduce(
+              (acc, [lon, lat]) => [acc[0] + lon, acc[1] + lat],
+              [0, 0]
+            )
+                .map((sum) => sum / coordinates.length);
+            
+
+          const payload = {
+            name,
+            centroid: { lat: centroid[1], lon: centroid[0] },
+            // coordinates, 
+            };
+            
+            try {
+    const response = await fetch("http://127.0.0.1:5000/api/community", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const result = await response.json();
+    console.log("✅ Flask response:", result);
+  } catch (error) {
+    console.error("❌ Error sending data to backend:", error);
+  }
+
           new mapboxgl.Popup()
-            .setLngLat(e.lngLat)
-            .setHTML(`<strong>${name}</strong>`)
+            .setLngLat(centroid as [number, number])
+            .setHTML(`
+              <strong>${name}</strong><br/>
+              Lat: ${centroid[1].toFixed(5)}, Lon: ${centroid[0].toFixed(5)}
+            `)
             .addTo(map);
         });
 
-        // Change cursor on hover
         map.on("mouseenter", "communities-fill", () => {
           map.getCanvas().style.cursor = "pointer";
         });
@@ -98,8 +140,7 @@ const MapView: FC = () => {
         });
 
         setStatusMessage("Loaded Calgary community boundaries!");
-      } catch (error) {
-        console.error(error);
+      } catch {
         setStatusMessage("Failed to load community boundaries.");
       }
     });
@@ -119,7 +160,7 @@ const MapView: FC = () => {
           Calgary Community Map
         </p>
         <p className="text-xs text-slate-300">
-          Click a polygon to view its community district name.
+          Click a community to view its location.
         </p>
         {statusMessage && (
           <p className="text-cyan-400 text-xs mt-1">{statusMessage}</p>
