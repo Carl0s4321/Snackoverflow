@@ -9,7 +9,10 @@ export interface User {
 
 export interface UserStore {
   user: User | null;
+  token: any;
+  login: (username: any, password: any) => Promise<void>
   fetchUser: () => void;
+  logout: () => void
 }
 
 export interface Pin {
