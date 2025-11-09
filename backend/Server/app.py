@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 from pymongo import MongoClient
 import os
@@ -6,42 +6,41 @@ from dotenv import load_dotenv
 import certifi
 import requests
 from typing import Dict, Optional, Tuple, Any
+from werkzeug.utils import secure_filename
+from uuid import uuid4
+from datetime import datetime, timezone
 
 from flask_bcrypt import Bcrypt
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required
 
 
-# Import the schema for report validation (Assumes reports_schema.py is in the same directory)
+# Import your schema
 from reports_schema import REPORT_SCHEMA, ALL_CATEGORIES
 
-# ==============================================================================
+# ======================================================================
 # 0. CONFIGURATION AND WEIGHTS
-# ==============================================================================
+# ======================================================================
 
-# Define the weight for each environmental factor (must sum to 1.0)
 WEIGHTS = {
-    "air_quality": 0.60,  # 60% weight for Air Quality
-    "weather_rating": 0.40, # 40% weight for Weather Rating
+    "air_quality": 0.60,
+    "weather_rating": 0.40,
 }
-#hello
-# Ensure weights sum to 1.0 (simple check)
+
+DEFAULT_SCORE = 5.5
+DEFAULT_DESCRIPTION = "Data unavailable"
+
 if abs(sum(WEIGHTS.values()) - 1.0) > 0.001:
     raise ValueError("The weights in the WEIGHTS dictionary must sum to 1.0.")
 
-# API Settings
-DEFAULT_SCORE = 5.5 
-DEFAULT_DESCRIPTION = "Data unavailable"
-
-# Load environment variables
 load_dotenv()
 API_KEY = os.getenv('MEERSENS_API_KEY')
 if not API_KEY:
     print("WARNING: MEERSENS_API_KEY is not set. API calls will likely fail.")
 JWT_KEY = os.getenv('JWT_SECRET')
 
-# ==============================================================================
-# 1. FLASK AND MONGODB SETUP
-# ==============================================================================
+# ======================================================================
+# 1. FLASK + MONGO SETUP
+# ======================================================================
 
 app = Flask(__name__)
 CORS(app)
@@ -56,19 +55,28 @@ mongo_uri = os.getenv("MONGO_URI")
 try:
     client = MongoClient(mongo_uri, tlsCAFile=certifi.where())
     db = client["welivehere"]
-    # Use the 'reports' collection for submissions
     collection = db["reports"]
     usersCollection = db["users"]
     print("INFO: MongoDB connection established (Collection: reports).")
 except Exception as e:
-    print(f"ERROR: Failed to connect to MongoDB: {e}")
+    print(f"❌ ERROR: Failed to connect to MongoDB: {e}")
     client = None
     collection = None
     usersCollection = None
 
-# ==============================================================================
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+IMAGES_DIR = os.path.join(BASE_DIR, "..", "images")
+os.makedirs(IMAGES_DIR, exist_ok=True)
+
+# ======================================================================
 # 2. VALIDATION UTILITY
-# ==============================================================================
+# ======================================================================
+
+def validate_user_register(data):
+    user = usersCollection.find_one({"username": data.get("username")})
+    if user:
+        return "Username found"
+    # MAKE OTHER IDK
 
 def validate_user_register(data):
     user = usersCollection.find_one({"username": data.get("username")})
@@ -77,223 +85,135 @@ def validate_user_register(data):
     # MAKE OTHER IDK
 
 def _validate_report_data(data: Dict) -> Optional[str]:
-    """Validates incoming report data against the REPORT_SCHEMA."""
     if not isinstance(data, dict):
         return "Payload must be a JSON object."
 
     for field, rules in REPORT_SCHEMA.items():
         is_required = rules.get("required", False)
-        
-        # 1. Check for missing required fields
         if is_required and field not in data:
             return f"Missing required field: '{field}'"
 
         if field in data:
             value = data[field]
             expected_type = rules["type"]
-            
-            # 2. Check type
-            if not isinstance(value, expected_type):
-                return f"Field '{field}' must be of type {expected_type.__name__}, got {type(value).__name__}"
 
-            # 3. Check specific category constraints
+            if not isinstance(value, expected_type):
+                return f"Field '{field}' must be {expected_type.__name__}"
+
             if field == "category" and value not in rules.get("allowed_values", []):
                 allowed = ', '.join(rules['allowed_values'])
-                return f"Field 'category' must be one of: {allowed}"
-            
-            # 4. Check nested geolocation structure
+                return f"Category must be one of: {allowed}"
+
             if field == "geolocation":
                 geo_schema = rules["schema"]
                 for geo_field, geo_rules in geo_schema.items():
                     if geo_field not in value:
-                        return f"Missing required geolocation sub-field: '{geo_field}'"
+                        return f"Missing geolocation field: '{geo_field}'"
                     if not isinstance(value[geo_field], geo_rules["type"]):
-                        return f"Geolocation field '{geo_field}' must be of type {geo_rules['type'].__name__}"
-                        
-    return None # Validation passed
+                        return f"'{geo_field}' must be {geo_rules['type'].__name__}"
 
-# ==============================================================================
+    return None
+
+# ======================================================================
 # 3. AIR QUALITY SERVICE
-# (Meersens MAQI 0-100 where 0=best, 100=worst)
-# ==============================================================================
+# ======================================================================
 
 def _scale_maqi_to_score(maqi_value: float) -> float:
-    """Scales MAQI (0-100, 100=worst) to a 1-10 quality score (10=best)."""
-    MAQI_MIN = 0.0
-    MAQI_MAX = 100.0
-    SCORE_MAX = 10.0
-    SCORE_MIN = 1.0
-    
+    MAQI_MIN, MAQI_MAX = 0.0, 100.0
+    SCORE_MAX, SCORE_MIN = 10.0, 1.0
     maqi_clamped = max(MAQI_MIN, min(MAQI_MAX, maqi_value))
-    # Slope = -0.09
     slope = (SCORE_MIN - SCORE_MAX) / (MAQI_MAX - MAQI_MIN)
-    intercept = SCORE_MAX
-    score = (slope * maqi_clamped) + intercept
-    
-    # Clamp minimum score to 1.0
-    score = max(SCORE_MIN, score)
-    
-    return float(f'{score:.1f}')
+    score = (slope * maqi_clamped) + SCORE_MAX
+    return round(max(SCORE_MIN, score), 1)
 
 def get_air_quality_score(latitude: float, longitude: float) -> Tuple[float, str]:
-    """Fetches air quality and returns a (score_1_10, description) tuple."""
-    print(f"DEBUG: Starting Air Quality fetch for {latitude},{longitude}")
-    url = "https://api.meersens.com/environment/public/air/current"
-    
+    print(f"DEBUG: Fetching Air Quality for {latitude},{longitude}")
     if not API_KEY:
-        print("ERROR: API_KEY is missing. Cannot fetch Air Quality data.")
-        return DEFAULT_SCORE, f"Air: {DEFAULT_DESCRIPTION} (API Key Missing)"
+        return DEFAULT_SCORE, "Air: Data unavailable (no API key)"
 
     try:
-        response = requests.get(url, headers={'apikey': API_KEY}, params={'lat': latitude, 'lng': longitude}, timeout=10)
-        response.raise_for_status() # Raises an exception for 4xx or 5xx status codes
-        air_data = response.json()
-        
-        if air_data.get('found'):
-            raw_maqi_value = air_data.get('index', {}).get('value')
-            qualification = air_data.get('index', {}).get('qualification')
-            
-            if raw_maqi_value is not None and qualification is not None:
-                maqi_float = float(raw_maqi_value)
-                score = _scale_maqi_to_score(maqi_float)
-                description = f"Air: {qualification}"
-                print("DEBUG: Successfully fetched and calculated Air Quality score.")
-                return score, description
-
-    except (requests.RequestException, ValueError, TypeError) as e:
-        print(f"ERROR: Air Quality API failure: {e}")
-    
-    print("DEBUG: Air Quality fetch returning default score.")
+        url = "https://api.meersens.com/environment/public/air/current"
+        resp = requests.get(url, headers={'apikey': API_KEY}, params={'lat': latitude, 'lng': longitude}, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+        if data.get('found'):
+            idx = data.get('index', {})
+            if idx.get('value') is not None:
+                score = _scale_maqi_to_score(float(idx['value']))
+                desc = f"Air: {idx.get('qualification', 'Unknown')}"
+                return score, desc
+    except Exception as e:
+        print(f"ERROR: Air Quality API failed: {e}")
     return DEFAULT_SCORE, f"Air: {DEFAULT_DESCRIPTION}"
 
-# ==============================================================================
+# ======================================================================
 # 4. WEATHER SERVICE
-# (Based on temperature deviation from 25°C)
-# ==============================================================================
+# ======================================================================
 
 class WeatherService:
     OPTIMAL_TEMP = 25.0
     BASE_URL = "https://api.meersens.com/environment/public/weather/current"
 
-    def get_weather_data(self, lat: float, lng: float) -> Dict[str, Any]:
-        """Fetch raw weather data from Meersens API."""
-        response = requests.get(
-            self.BASE_URL,
-            headers={'apikey': API_KEY},
-            params={'lat': lat, 'lng': lng},
-            timeout=10
-        )
-        response.raise_for_status()
-        return response.json()
+    def get_weather_data(self, lat: float, lng: float):
+        r = requests.get(self.BASE_URL, headers={'apikey': API_KEY}, params={'lat': lat, 'lng': lng}, timeout=10)
+        r.raise_for_status()
+        return r.json()
 
-    def calculate_weather_rating(self, weather_data: Dict[str, Any]) -> float:
-        """Calculate a weather rating out of 10 based on temperature deviation."""
-        temperature = weather_data.get("parameters", {}).get("temperature", {}).get("value")
-        if temperature is None:
-            # If temp is missing, assign the default score
+    def calculate_weather_rating(self, data: Dict[str, Any]) -> float:
+        temp = data.get("parameters", {}).get("temperature", {}).get("value")
+        if temp is None:
             return DEFAULT_SCORE
-
-        # Max deviation from optimal (25C) to bounds (-40C or 90C) is 65 degrees
-        max_deviation = 65.0
-        deviation = abs(temperature - self.OPTIMAL_TEMP)
-        
-        # Rating reaches 1.0 at max deviation (to keep it a 1-10 scale)
-        rating = max(1.0, 10 - (deviation / max_deviation) * 10) 
+        deviation = abs(temp - self.OPTIMAL_TEMP)
+        rating = max(1.0, 10 - (deviation / 65.0) * 10)
         return round(rating, 1)
 
-    def get_weather_description(self, weather_data: Dict[str, Any]) -> str:
-        """Generate a short description of the weather (condition and temperature)."""
-        parameters = weather_data.get("parameters", {})
-        temperature = parameters.get("temperature", {}).get("value")
-        weather_condition = parameters.get("weather_condition", {}).get("value")
+    def describe_weather(self, data: Dict[str, Any]) -> str:
+        params = data.get("parameters", {})
+        temp = params.get("temperature", {}).get("value")
+        condition = params.get("weather_condition", {}).get("value", "Unknown").title()
+        if temp is None:
+            return f"Weather: {condition}"
+        if temp < 0: desc = "Freezing"
+        elif temp < 10: desc = "Cold"
+        elif temp < 20: desc = "Cool"
+        elif temp < 28: desc = "Pleasant"
+        elif temp < 35: desc = "Warm"
+        else: desc = "Hot"
+        return f"Weather: {condition}, {desc} ({temp}°C)"
 
-        condition_text = weather_condition.lower() if weather_condition else "Unknown"
-        
-        if temperature is not None:
-            if temperature < 0: temp_desc = "Freezing"
-            elif temperature < 10: temp_desc = "Cold"
-            elif temperature < 20: temp_desc = "Cool"
-            elif temperature < 28: temp_desc = "Pleasant"
-            elif temperature < 35: temp_desc = "Warm"
-            else: temp_desc = "Hot"
-            
-            return f"Weather: {condition_text.title()}, {temp_desc} ({temperature}°C)"
-        
-        return f"Weather: {condition_text.title()}"
-
-
-def get_weather_score(latitude: float, longitude: float) -> Tuple[float, str]:
-    """Fetches weather data and returns a (score_1_10, description) tuple."""
-    print(f"DEBUG: Starting Weather fetch for {latitude},{longitude}")
+def get_weather_score(lat: float, lon: float) -> Tuple[float, str]:
+    print(f"DEBUG: Fetching Weather for {lat},{lon}")
     service = WeatherService()
-
     if not API_KEY:
-        print("ERROR: API_KEY is missing. Cannot fetch Weather data.")
-        return DEFAULT_SCORE, f"Weather: {DEFAULT_DESCRIPTION} (API Key Missing)"
-
+        return DEFAULT_SCORE, "Weather: API key missing"
     try:
-        weather_data = service.get_weather_data(latitude, longitude)
-        rating = service.calculate_weather_rating(weather_data)
-        description = service.get_weather_description(weather_data)
-        print("DEBUG: Successfully fetched and calculated Weather score.")
-        return rating, description
-    except (requests.RequestException, ValueError, TypeError, Exception) as e:
-        print(f"ERROR: Weather API failure: {e}")
-    
-    print("DEBUG: Weather fetch returning default score.")
-    return DEFAULT_SCORE, f"Weather: {DEFAULT_DESCRIPTION}"
+        data = service.get_weather_data(lat, lon)
+        score = service.calculate_weather_rating(data)
+        desc = service.describe_weather(data)
+        return score, desc
+    except Exception as e:
+        print(f"ERROR: Weather API failed: {e}")
+        return DEFAULT_SCORE, f"Weather: {DEFAULT_DESCRIPTION}"
 
-# ==============================================================================
-# 5. CORE CITY QUALITY LOGIC
-# ==============================================================================
+# ======================================================================
+# 5. CITY QUALITY CALCULATOR
+# ======================================================================
 
-def calculate_city_quality_score(lat: float, lng: float) -> Dict[str, Any]:
-    """
-    Fetches scores from Air Quality and Weather APIs, calculates the weighted average,
-    and formats the final output for the frontend.
-    """
-    
-    # 1. Fetch individual scores and descriptions
-    print("DEBUG: Starting individual score fetching.")
-    
-    # Air Quality
-    air_score, air_desc = get_air_quality_score(lat, lng)
-
-    # Weather Rating
-    weather_score, weather_desc = get_weather_score(lat, lng)
-    
-    print("DEBUG: Completed individual score fetching.")
-    
-    # 2. Compile scores for averaging
-    scores = {
-        "air_quality": air_score,
-        "weather_rating": weather_score,
-    }
-
-    # 3. Calculate the Weighted Average Score
-    total_weighted_score = 0.0
-    for factor, score in scores.items():
-        weight = WEIGHTS.get(factor, 0.0)
-        total_weighted_score += score * weight
-    
-    # Final City Quality Score (clamp and format)
-    city_quality_score = round(total_weighted_score, 1)
-
-    # 4. Format Output
-    print(f"DEBUG: Final Calculated Score: {city_quality_score}")
+def calculate_city_quality_score(lat: float, lon: float) -> Dict[str, Any]:
+    air_score, air_desc = get_air_quality_score(lat, lon)
+    weather_score, weather_desc = get_weather_score(lat, lon)
+    total = air_score * WEIGHTS["air_quality"] + weather_score * WEIGHTS["weather_rating"]
     return {
-        "city_quality_score": city_quality_score,
+        "city_quality_score": round(total, 1),
         "individual_ratings": {
-            "air_quality": {"score": air_score, "description": air_desc, "weight": WEIGHTS["air_quality"]},
-            "weather_rating": {"score": weather_score, "description": weather_desc, "weight": WEIGHTS["weather_rating"]},
+            "air_quality": {"score": air_score, "desc": air_desc, "weight": WEIGHTS["air_quality"]},
+            "weather_rating": {"score": weather_score, "desc": weather_desc, "weight": WEIGHTS["weather_rating"]},
         },
-        "weights_used": WEIGHTS,
-        "message": "City Quality Score calculated successfully."
     }
 
-# ==============================================================================
+# ======================================================================
 # 6. FLASK ROUTES
-# ==============================================================================
+# ======================================================================
 
 @app.route("/")
 def home():
@@ -389,163 +309,94 @@ def add_submission():
         return jsonify({"error": f"Failed to add submission: {e}"}), 500
 
 
-@app.route("/api/city-quality", methods=["GET"])
-def get_city_quality():
-    """
-    API endpoint to fetch and calculate the City Quality Score for given coordinates.
-    Expects: ?lat=<latitude>&lng=<longitude>
-    """
-    print("DEBUG: --- BEGIN /api/city-quality ROUTE EXECUTION ---") 
+@app.route("/api/city-quality")
+def city_quality():
     try:
-        # Get coordinates from query parameters
-        latitude = float(request.args.get("lat"))
-        longitude = float(request.args.get("lng"))
-        print(f"DEBUG: Parsed coordinates: Lat={latitude}, Lng={longitude}")
-        
-        # Calculate score and format data
-        result = calculate_city_quality_score(latitude, longitude)
-        
-        print("DEBUG: --- END /api/city-quality ROUTE EXECUTION (Success) ---")
-        return jsonify(result), 200
-
+        lat = float(request.args.get("lat"))
+        lon = float(request.args.get("lng"))
     except (TypeError, ValueError):
-        print("ERROR: Invalid lat/lng parameters.")
-        return jsonify({
-            "error": "Invalid or missing latitude/longitude parameters.",
-            "expected_format": "/api/city-quality?lat=40.7128&lng=-74.0060"
-        }), 400
-    except Exception as e:
-        print(f"FATAL ERROR: CITY QUALITY ROUTE FAILED: {e}")
-        return jsonify({"error": "An internal error occurred while fetching data."}), 500
-
-    data = request.json
-    collection.insert_one(data)
-    return jsonify({"message": "Submission added"}), 201
-
-@app.route("/api/submissions/photo", methods=["POST"])
-def upload_photo():
-    if "photo" not in request.files:
-        return jsonify({"message": "Photo is required"}), 400
-
-    lat = request.form.get("lat")
-    lon = request.form.get("lon")
-    notes = request.form.get("notes")
-
-    if lat is None or lon is None:
-        return jsonify({"message": "Latitude and longitude are required"}), 400
-
-    try:
-        lat_val = float(lat)
-        lon_val = float(lon)
-    except ValueError:
-        return jsonify({"message": "Latitude/longitude must be numbers"}), 400
-
-    photo = request.files["photo"]
-    if photo.filename == "":
-        return jsonify({"message": "Photo filename is empty"}), 400
-
-    safe_name = secure_filename(photo.filename)
-    extension = os.path.splitext(safe_name)[1] or ".jpg"
-    stored_name = f"{uuid4().hex}{extension}"
-    save_path = os.path.join(IMAGES_DIR, stored_name)
-    photo.save(save_path)
-
-    document = {
-        "type": "photo",
-        "latitude": lat_val,
-        "longitude": lon_val,
-        "image": stored_name,
-        "createdAt": datetime.utcnow().isoformat() + "Z",
-    }
-    if notes:
-        document["notes"] = notes
-    collection.insert_one(document)
-
-    return jsonify(
-        {"message": "Photo submission stored", "imagePath": f"/images/{stored_name}"}
-    ), 201
+        return jsonify({"error": "Invalid coordinates"}), 400
+    data = calculate_city_quality_score(lat, lon)
+    return jsonify(data), 200
 
 @app.route("/api/communities", methods=["POST"])
 def save_community():
     data = request.json or {}
     name = data.get("name")
     centroid = data.get("centroid") or {}
-    lat = centroid.get("lat")
-    lon = centroid.get("lon")
+    lat, lon = centroid.get("lat"), centroid.get("lon")
 
     if not name or lat is None or lon is None:
-        return (
-            jsonify({"message": "Community name and centroid (lat/lon) are required."}),
-            400,
-        )
+        return jsonify({"message": "Missing name or coordinates"}), 400
 
     try:
-        lat_val = float(lat)
-        lon_val = float(lon)
-    except (TypeError, ValueError):
-        return jsonify({"message": "Centroid lat/lon must be numeric."}), 400
+        doc = {
+            "type": "community",
+            "name": name,
+            "centroid": {"lat": float(lat), "lon": float(lon)},
+            "createdAt": datetime.now(timezone.utc).isoformat(),
+        }
+        collection.insert_one(doc)
+        return jsonify({"message": "Community saved"}), 201
+    except Exception as e:
+        return jsonify({"message": f"DB error: {e}"}), 500
 
-    document = {
-        "type": "community",
-        "name": name,
-        "centroid": {"lat": lat_val, "lon": lon_val},
-        "createdAt": datetime.utcnow().isoformat() + "Z",
-    }
-    collection.insert_one(document)
-
-    return jsonify({"message": "Community saved."}), 201
+@app.route("/api/reports", methods=["GET"])
+def get_reports():
+    try:
+        reports = list(collection.find({"type": "report"}, {"_id": 0}))
+        return jsonify(reports), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/api/reports", methods=["POST"])
 def create_report():
-    title = (request.form.get("title") or "").strip()
-    description = (request.form.get("description") or "").strip()
-    lat = request.form.get("lat")
-    lon = request.form.get("lon")
+    form = request.form
     photo = request.files.get("photo")
 
-    if not title or not description:
-        return jsonify({"message": "Title and description are required."}), 400
+    title = (form.get("title") or "").strip()
+    desc = (form.get("description") or "").strip()
+    cat = (form.get("category") or "infrastructure").strip().lower()
+    lat, lon = form.get("lat"), form.get("lon")
 
-    if photo is None:
-        return jsonify({"message": "Report photo is required."}), 400
-
-    lat_val = lon_val = None
-    if lat and lon:
-        try:
-            lat_val = float(lat)
-            lon_val = float(lon)
-        except ValueError:
-            return jsonify({"message": "Latitude/longitude must be numeric."}), 400
+    if not title or not desc or not photo:
+        return jsonify({"message": "Missing required fields"}), 400
 
     safe_name = secure_filename(photo.filename or "report.jpg")
-    extension = os.path.splitext(safe_name)[1] or ".jpg"
-    stored_name = f"{uuid4().hex}{extension}"
-    save_path = os.path.join(IMAGES_DIR, stored_name)
-    photo.save(save_path)
+    ext = os.path.splitext(safe_name)[1] or ".jpg"
+    stored_name = f"{uuid4().hex}{ext}"
+    photo.save(os.path.join(IMAGES_DIR, stored_name))
 
-    document = {
+    doc = {
         "type": "report",
         "title": title,
-        "description": description,
+        "description": desc,
+        "category": cat if cat in ALL_CATEGORIES else "infrastructure",
         "image": stored_name,
-        "createdAt": datetime.utcnow().isoformat() + "Z",
+        "createdAt": datetime.now(timezone.utc).isoformat(),
     }
-    if lat_val is not None and lon_val is not None:
-        document["latitude"] = lat_val
-        document["longitude"] = lon_val
 
-    collection.insert_one(document)
+    if lat and lon:
+        try:
+            doc["latitude"] = float(lat)
+            doc["longitude"] = float(lon)
+        except ValueError:
+            pass
 
-    return jsonify(
-        {
-            "message": "Report saved.",
-            "imagePath": f"/images/{stored_name}",
-        }
-    ), 201
+    collection.insert_one(doc)
+    return jsonify({"message": "Report saved", "imagePath": f"/images/{stored_name}"}), 201
 
-@app.route("/images/<path:filename>", methods=["GET"])
+@app.route("/images/<path:filename>")
 def serve_image(filename):
     return send_from_directory(IMAGES_DIR, filename)
 
+# ======================================================================
+# 7. RUN APP
+# ======================================================================
+
 if __name__ == "__main__":
+    # Create the images directory if it doesn't exist (needed for upload_photo)
+    if not os.path.exists(IMAGES_DIR):
+        os.makedirs(IMAGES_DIR)
+        
     app.run(port=5000, debug=True)
