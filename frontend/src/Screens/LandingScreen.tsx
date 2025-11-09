@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { gsap } from "gsap";
+import { Link } from "react-router-dom";
 
 export default function LandingPage() {
   const heroRef = useRef(null);
@@ -36,20 +37,20 @@ export default function LandingPage() {
         ref={headingRef}
         className="text-5xl md:text-6xl font-extrabold mb-6 drop-shadow-lg"
       >
-        We Live Here
+        welivehere
       </h1>
       <p className="text-lg md:text-xl max-w-xl mb-8 opacity-90">subtitle</p>
       <button
         ref={buttonRef}
         className="px-8 py-3 bg-white text-indigo-600 rounded-full font-semibold shadow-lg hover:scale-105 transform transition"
       >
-        Get Started
+        <Link to="/auth/register">Register</Link>
       </button>
       <button
         ref={buttonRef}
         className="px-8 py-3 bg-white text-indigo-600 rounded-full font-semibold shadow-lg hover:scale-105 transform transition"
       >
-        Login
+        <Link to="/auth/login">Login</Link>
       </button>
     </div>
   );
