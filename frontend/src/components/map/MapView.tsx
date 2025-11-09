@@ -118,9 +118,9 @@ const MapView: FC = () => {
     });
 
     const result = await response.json();
-    console.log("✅ Flask response:", result);
+    console.log("Flask response:", result);
   } catch (error) {
-    console.error("❌ Error sending data to backend:", error);
+    console.error("Error sending data to backend:", error);
   }
 
           new mapboxgl.Popup()

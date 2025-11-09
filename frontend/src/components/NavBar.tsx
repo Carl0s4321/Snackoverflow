@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { gsap } from "gsap";
 import Logo from "./Logo";
 import {links} from "../constants/navLinks"
@@ -20,6 +20,29 @@ export default function Navbar() {
       "-=0.4"
     );
   }, []);
+
+  const [isOpen, setIsOpen] = useState(false);
+
+  useEffect(() => {
+    const handleMouseMove = (e) => {
+      if (e.clientY < 60) {
+        setIsOpen(true);
+      } else if (e.clientY > 120) {
+        setIsOpen(false);
+      }
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    return () => window.removeEventListener("mousemove", handleMouseMove);
+  }, []);
+
+  useEffect(() => {
+    gsap.to(navRef.current, {
+      y: isOpen ? 0 : -100, 
+      duration: 0.6,
+      ease: "power3.out",
+    });
+  }, [isOpen]);
 
   return (
     <nav

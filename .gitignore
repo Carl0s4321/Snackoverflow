@@ -42,3 +42,4 @@ package-lock.json
 venv/
 __pycache__/
 backend/.env
+frontend/.env

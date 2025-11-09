@@ -31,7 +31,7 @@ export default function LandingPage() {
   return (
     <div
       ref={heroRef}
-      className="w-screen h-screen flex flex-col justify-center items-center bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 text-white text-center"
+      className="w-screen h-screen flex flex-col justify-center items-center bg-linear-to-br from-indigo-500 via-purple-500 to-pink-500 text-white text-center"
     >
       <h1
         ref={headingRef}
