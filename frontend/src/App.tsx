@@ -1,4 +1,3 @@
-import React from "react";
 import LandingScreen from "./Screens/LandingScreen";
 import { BrowserRouter as Router, Route, Routes } from "react-router-dom";
 import NavBar from "./components/NavBar";
@@ -18,7 +17,6 @@ const App = () => {
         
     </Routes>
       </Router>
-    //   <MapView/>
   );
 };
 
