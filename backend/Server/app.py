@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 from pymongo import MongoClient
 import os
@@ -7,6 +7,9 @@ import certifi
 import requests
 from time import sleep # Retained, though not used in the simplified fetchers
 from typing import Dict, Optional, Tuple, Any
+
+# Import the schema for report validation (Assumes reports_schema.py is in the same directory)
+from reports_schema import REPORT_SCHEMA, ALL_CATEGORIES
 
 # ==============================================================================
 # 0. CONFIGURATION AND WEIGHTS
@@ -27,14 +30,9 @@ DEFAULT_SCORE = 5.5
 DEFAULT_DESCRIPTION = "Data unavailable"
 
 # Load environment variables
-from datetime import datetime
-from uuid import uuid4
-from werkzeug.utils import secure_filename
-
 load_dotenv()
 API_KEY = os.getenv('MEERSENS_API_KEY')
 if not API_KEY:
-    # This warning is helpful, but the fetchers will also check explicitly
     print("WARNING: MEERSENS_API_KEY is not set. API calls will likely fail.")
 
 # ==============================================================================
@@ -48,15 +46,56 @@ mongo_uri = os.getenv("MONGO_URI")
 try:
     client = MongoClient(mongo_uri, tlsCAFile=certifi.where())
     db = client["welivehere"]
-    collection = db["submissions"]
-    print("INFO: MongoDB connection established.")
+    # Use the 'reports' collection for submissions
+    collection = db["reports"]
+    print("INFO: MongoDB connection established (Collection: reports).")
 except Exception as e:
     print(f"ERROR: Failed to connect to MongoDB: {e}")
     client = None
     collection = None
 
 # ==============================================================================
-# 2. AIR QUALITY SERVICE
+# 2. VALIDATION UTILITY
+# ==============================================================================
+
+def _validate_report_data(data: Dict) -> Optional[str]:
+    """Validates incoming report data against the REPORT_SCHEMA."""
+    if not isinstance(data, dict):
+        return "Payload must be a JSON object."
+
+    for field, rules in REPORT_SCHEMA.items():
+        is_required = rules.get("required", False)
+        
+        # 1. Check for missing required fields
+        if is_required and field not in data:
+            return f"Missing required field: '{field}'"
+
+        if field in data:
+            value = data[field]
+            expected_type = rules["type"]
+            
+            # 2. Check type
+            if not isinstance(value, expected_type):
+                return f"Field '{field}' must be of type {expected_type.__name__}, got {type(value).__name__}"
+
+            # 3. Check specific category constraints
+            if field == "category" and value not in rules.get("allowed_values", []):
+                allowed = ', '.join(rules['allowed_values'])
+                return f"Field 'category' must be one of: {allowed}"
+            
+            # 4. Check nested geolocation structure
+            if field == "geolocation":
+                geo_schema = rules["schema"]
+                for geo_field, geo_rules in geo_schema.items():
+                    if geo_field not in value:
+                        return f"Missing required geolocation sub-field: '{geo_field}'"
+                    if not isinstance(value[geo_field], geo_rules["type"]):
+                        return f"Geolocation field '{geo_field}' must be of type {geo_rules['type'].__name__}"
+                        
+    return None # Validation passed
+
+# ==============================================================================
+# 3. AIR QUALITY SERVICE
 # (Meersens MAQI 0-100 where 0=best, 100=worst)
 # ==============================================================================
 
@@ -110,7 +149,7 @@ def get_air_quality_score(latitude: float, longitude: float) -> Tuple[float, str
     return DEFAULT_SCORE, f"Air: {DEFAULT_DESCRIPTION}"
 
 # ==============================================================================
-# 3. WEATHER SERVICE
+# 4. WEATHER SERVICE
 # (Based on temperature deviation from 25°C)
 # ==============================================================================
 
@@ -187,7 +226,7 @@ def get_weather_score(latitude: float, longitude: float) -> Tuple[float, str]:
     return DEFAULT_SCORE, f"Weather: {DEFAULT_DESCRIPTION}"
 
 # ==============================================================================
-# 4. CORE CITY QUALITY LOGIC
+# 5. CORE CITY QUALITY LOGIC
 # ==============================================================================
 
 def calculate_city_quality_score(lat: float, lng: float) -> Dict[str, Any]:
@@ -235,39 +274,49 @@ def calculate_city_quality_score(lat: float, lng: float) -> Dict[str, Any]:
     }
 
 # ==============================================================================
-# 5. FLASK ROUTES
+# 6. FLASK ROUTES
 # ==============================================================================
-client = MongoClient(mongo_uri, tlsCAFile=certifi.where())
-db = client["welivehere"]
-collection = db["submissions"]
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-IMAGES_DIR = os.path.join(BASE_DIR, "..", "images")
-os.makedirs(IMAGES_DIR, exist_ok=True)
 
 @app.route("/")
 def home():
+    print("DEBUG: Hit / route.")
     return jsonify({"message": "Flask backend running and connected to MongoDB"})
 
-@app.route("/api/submissions", methods=["GET"])
+@app.route("/api/reports", methods=["GET"])
 def get_submissions():
+    print("DEBUG: Hit /api/reports GET route.")
     if collection is None:
         return jsonify({"error": "Database not connected"}), 500
     try:
+        # Fetch all reports from the 'reports' collection
+        # This data, including the 'geolocation' field, is what the frontend needs for mapping.
         data = list(collection.find({}, {"_id": 0}))
         return jsonify(data)
     except Exception as e:
+        print(f"ERROR: Database query failed: {e}")
         return jsonify({"error": f"Database query failed: {e}"}), 500
 
 
-@app.route("/api/submissions", methods=["POST"])
+@app.route("/api/reports", methods=["POST"])
 def add_submission():
+    print("DEBUG: Hit /api/reports POST route.")
     if collection is None:
         return jsonify({"error": "Database not connected"}), 500
     try:
         data = request.json
+        
+        # Validate incoming data using the schema
+        validation_error = _validate_report_data(data)
+        if validation_error:
+            print(f"ERROR: Validation failed: {validation_error}")
+            return jsonify({"error": "Invalid report data format", "details": validation_error}), 400
+
+        # Data is valid, insert into the 'reports' collection
         collection.insert_one(data)
-        return jsonify({"message": "Submission added"}), 201
+        print(f"DEBUG: Successfully added submission: {data.get('title')}")
+        return jsonify({"message": "Report submission added successfully"}), 201
     except Exception as e:
+        print(f"ERROR: Failed to add submission: {e}")
         return jsonify({"error": f"Failed to add submission: {e}"}), 500
 
 
@@ -277,7 +326,7 @@ def get_city_quality():
     API endpoint to fetch and calculate the City Quality Score for given coordinates.
     Expects: ?lat=<latitude>&lng=<longitude>
     """
-    print("DEBUG: Hit /api/city-quality route.")
+    print("DEBUG: --- BEGIN /api/city-quality ROUTE EXECUTION ---") 
     try:
         # Get coordinates from query parameters
         latitude = float(request.args.get("lat"))
@@ -287,7 +336,7 @@ def get_city_quality():
         # Calculate score and format data
         result = calculate_city_quality_score(latitude, longitude)
         
-        print("DEBUG: Route returning success response.")
+        print("DEBUG: --- END /api/city-quality ROUTE EXECUTION (Success) ---")
         return jsonify(result), 200
 
     except (TypeError, ValueError):
