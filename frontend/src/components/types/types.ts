@@ -19,3 +19,12 @@ export interface Pin {
   coordinates: number[];
   type: string;
 }
+
+export interface CommunityQuality {
+  city_quality_score: number;
+  scores: Record<
+    string,
+    { score: number; description: string; weight: number }
+  >;
+  message?: string;
+}
