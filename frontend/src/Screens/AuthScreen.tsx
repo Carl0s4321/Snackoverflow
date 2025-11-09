@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import gsap from "gsap";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 
 export default function AuthPage() {
   let { postId } = useParams();
@@ -56,7 +56,7 @@ export default function AuthPage() {
             type="submit"
             className="w-full bg-purple-500 text-white py-2 rounded-md hover:bg-purple-600 transition"
           >
-            {isLogin ? "Login" : "Register"}
+            <Link to="/map">{isLogin ? "Login" : "Register"}</Link>
           </button>
         </form>
 
