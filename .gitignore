@@ -37,3 +37,8 @@ package-lock.json
 *.njsproj
 *.sln
 *.sw?
+
+# Environment Variables
+venv/
+__pycache__/
+backend/.env

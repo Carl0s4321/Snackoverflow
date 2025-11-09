@@ -3,17 +3,14 @@ import { useEffect, useRef, useState } from "react";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 
-// --- Calgary setup ---
 const DEFAULT_CENTER: [number, number] = [-114.0719, 51.0447];
 const CITY_BOUNDS: [mapboxgl.LngLatLike, mapboxgl.LngLatLike] = [
   [-114.30, 50.85],
   [-113.78, 51.20],
 ];
 
-// 🔑 Your Mapbox token
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN ?? "";
 
-// 🔗 GeoJSON source (from the Calgary Open Data portal)
 const COMMUNITY_DATA_URL =
   "https://data.calgary.ca/resource/surr-xmvs.geojson";
 
