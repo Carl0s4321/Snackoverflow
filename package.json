@@ -1,0 +1,29 @@
+{
+  "name": "snackoverflow",
+  "version": "1.0.0",
+  "description": "Full-stack project with Flask, Node, and React",
+  "main": "index.js",
+  "scripts": {
+    "dev": "concurrently \"npm run flask\" \"npm run client\"",
+    "flask": "cd backend-flask && flask run",
+    "server": "cd backend-node && npm run dev",
+    "client": "cd frontend && npm start",
+    "install-all": "npm install && cd backend-node && npm install || echo 'No Node backend found' && cd ../frontend && npm install && cd ../backend-flask && python -m venv venv && . venv/bin/activate && pip install -r requirements.txt && cd ..",
+    "build": "cd frontend && npm run build",
+    "start": "cd backend-node && npm start"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Carl0s4321/Snackoverflow.git"
+  },
+  "keywords": ["flask", "react", "node", "mongodb", "mern"],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Carl0s4321/Snackoverflow/issues"
+  },
+  "homepage": "https://github.com/Carl0s4321/Snackoverflow#readme",
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}
