@@ -1,11 +1,17 @@
 import { useEffect, useRef, useState } from "react";
 import gsap from "gsap";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useNavigate } from "react-router-dom";
 
 export default function AuthPage() {
-  let { postId } = useParams();
-  const [isLogin, setIsLogin] = useState(postId === "login" ? true : false);
+  let { type } = useParams();
+  const [isLogin, setIsLogin] = useState(type === "login" ? true : false);
+  const navigate = useNavigate();
+
   const formRef = useRef(null);
+
+  useEffect(() => {
+    console.log("postId", type);
+  }, [type]);
 
   useEffect(() => {
     gsap.fromTo(
@@ -16,20 +22,28 @@ export default function AuthPage() {
   }, [isLogin]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-r from-purple-400 to-pink-400">
+    <div className="min-h-screen flex items-center justify-center">
       <div className="bg-white p-8 rounded-lg shadow-lg w-full max-w-md">
         <h2 className="text-2xl font-bold mb-6 text-center">
           {isLogin ? "Login" : "Register"}
         </h2>
 
-        <form ref={formRef} className="space-y-4">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            // perform login/register logic
+            navigate("/map");
+          }}
+          ref={formRef}
+          className="space-y-4"
+        >
           {!isLogin && (
             <div>
               <label className=" block text-sm font-medium">Full Name</label>
               <input
                 type="text"
                 placeholder="John Doe"
-                className="mt-1 block w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                className="mt-1 block w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-gray-600"
               />
             </div>
           )}
@@ -39,7 +53,7 @@ export default function AuthPage() {
             <input
               type="email"
               placeholder="example@mail.com"
-              className="mt-1 block w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+              className="mt-1 block w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-gray-600"
             />
           </div>
 
@@ -48,22 +62,22 @@ export default function AuthPage() {
             <input
               type="password"
               placeholder="********"
-              className="mt-1 block w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+              className="mt-1 block w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-gray-600"
             />
           </div>
 
           <button
             type="submit"
-            className="w-full bg-purple-500 text-white py-2 rounded-md hover:bg-purple-600 transition"
+            className="w-full bg-gray-500 text-white py-2 rounded-md hover:bg-gray-600 transition"
           >
-            <Link to="/map">{isLogin ? "Login" : "Register"}</Link>
+            {isLogin ? "Login" : "Register"}
           </button>
         </form>
 
         <p className="mt-4 text-center text-sm text-gray-600">
           {isLogin ? "Don't have an account?" : "Already have an account?"}{" "}
           <button
-            className="text-purple-500 font-semibold hover:underline"
+            className="text-black font-semibold hover:underline"
             onClick={() => setIsLogin(!isLogin)}
           >
             {isLogin ? "Register" : "Login"}
