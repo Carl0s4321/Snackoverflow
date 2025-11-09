@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 from pymongo import MongoClient
 import os
@@ -7,6 +7,11 @@ import certifi
 import requests
 from time import sleep # Retained, though not used in the simplified fetchers
 from typing import Dict, Optional, Tuple, Any
+
+# Required for routes later in the file
+from werkzeug.utils import secure_filename
+from uuid import uuid4
+from datetime import datetime
 
 # Import the schema for report validation (Assumes reports_schema.py is in the same directory)
 from reports_schema import REPORT_SCHEMA, ALL_CATEGORIES
@@ -17,10 +22,11 @@ from reports_schema import REPORT_SCHEMA, ALL_CATEGORIES
 
 # Define the weight for each environmental factor (must sum to 1.0)
 WEIGHTS = {
-    "air_quality": 0.60,  # 60% weight for Air Quality
-    "weather_rating": 0.40, # 40% weight for Weather Rating
+    "air_quality": 0.35,  # 35% weight for Air Quality
+    "weather_rating": 0.35, # 35% weight for Weather Rating
+    "transit_score": 0.30, # 30% weight for Transit Score (NEW)
 }
-#hello
+
 # Ensure weights sum to 1.0 (simple check)
 if abs(sum(WEIGHTS.values()) - 1.0) > 0.001:
     raise ValueError("The weights in the WEIGHTS dictionary must sum to 1.0.")
@@ -28,6 +34,9 @@ if abs(sum(WEIGHTS.values()) - 1.0) > 0.001:
 # API Settings
 DEFAULT_SCORE = 5.5 
 DEFAULT_DESCRIPTION = "Data unavailable"
+
+# Placeholder for image directory (required by the photo upload routes)
+IMAGES_DIR = "./images" 
 
 # Load environment variables
 load_dotenv()
@@ -225,13 +234,39 @@ def get_weather_score(latitude: float, longitude: float) -> Tuple[float, str]:
     print("DEBUG: Weather fetch returning default score.")
     return DEFAULT_SCORE, f"Weather: {DEFAULT_DESCRIPTION}"
 
+
+# ==============================================================================
+# 4.5. TRANSIT SERVICE (Simulated for demonstration purposes)
+# ==============================================================================
+
+def get_transit_score(latitude: float, longitude: float) -> Tuple[float, str]:
+    """
+    Simulated function to fetch/calculate a Transit Score (1-10).
+    In a real application, this would call an external API (e.g., Walk Score API or Google Transit).
+    """
+    print(f"DEBUG: Starting Transit Score fetch simulation for {latitude},{longitude}")
+    
+    # Simple simulation: Locations closer to 40 degree latitude (e.g., NYC, Madrid) get higher scores
+    # This is just for demonstration purposes.
+    if abs(latitude) > 50 or abs(latitude) < 20:
+        simulated_score = 4.5
+        description = "Transit: Below Average (Outlying Area)"
+    else:
+        # Example: Simulating a good score for central latitudes
+        simulated_score = 7.8
+        description = "Transit: Excellent (High Public Transport Access)"
+        
+    print("DEBUG: Successfully simulated Transit Score fetch.")
+    return simulated_score, description
+
+
 # ==============================================================================
 # 5. CORE CITY QUALITY LOGIC
 # ==============================================================================
 
 def calculate_city_quality_score(lat: float, lng: float) -> Dict[str, Any]:
     """
-    Fetches scores from Air Quality and Weather APIs, calculates the weighted average,
+    Fetches scores from Air Quality, Weather, and Transit, calculates the weighted average,
     and formats the final output for the frontend.
     """
     
@@ -244,12 +279,16 @@ def calculate_city_quality_score(lat: float, lng: float) -> Dict[str, Any]:
     # Weather Rating
     weather_score, weather_desc = get_weather_score(lat, lng)
     
+    # Transit Score (NEW)
+    transit_score, transit_desc = get_transit_score(lat, lng)
+    
     print("DEBUG: Completed individual score fetching.")
     
     # 2. Compile scores for averaging
     scores = {
         "air_quality": air_score,
         "weather_rating": weather_score,
+        "transit_score": transit_score, # NEW SCORE
     }
 
     # 3. Calculate the Weighted Average Score
@@ -268,6 +307,7 @@ def calculate_city_quality_score(lat: float, lng: float) -> Dict[str, Any]:
         "individual_ratings": {
             "air_quality": {"score": air_score, "description": air_desc, "weight": WEIGHTS["air_quality"]},
             "weather_rating": {"score": weather_score, "description": weather_desc, "weight": WEIGHTS["weather_rating"]},
+            "transit_score": {"score": transit_score, "description": transit_desc, "weight": WEIGHTS["transit_score"]}, # NEW RATING
         },
         "weights_used": WEIGHTS,
         "message": "City Quality Score calculated successfully."
@@ -349,9 +389,10 @@ def get_city_quality():
         print(f"FATAL ERROR: CITY QUALITY ROUTE FAILED: {e}")
         return jsonify({"error": "An internal error occurred while fetching data."}), 500
 
-    data = request.json
-    collection.insert_one(data)
-    return jsonify({"message": "Submission added"}), 201
+    # NOTE: The subsequent lines were redundant in the original and have been removed
+    # data = request.json
+    # collection.insert_one(data)
+    # return jsonify({"message": "Submission added"}), 201
 
 @app.route("/api/submissions/photo", methods=["POST"])
 def upload_photo():
@@ -479,4 +520,8 @@ def serve_image(filename):
     return send_from_directory(IMAGES_DIR, filename)
 
 if __name__ == "__main__":
+    # Create the images directory if it doesn't exist (needed for upload_photo)
+    if not os.path.exists(IMAGES_DIR):
+        os.makedirs(IMAGES_DIR)
+        
     app.run(port=5000, debug=True)
