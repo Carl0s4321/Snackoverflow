@@ -1,11 +1,12 @@
 import type { FC } from "react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import mapboxgl, { type GeoJSONFeature } from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import ReportForm from "../reports/ReportForm";
 import { useUserStore } from "../../stores/userStore";
 import Sidebar from "../Sidebar";
-import type { Pin } from "../types/types";
+import CommunityStatsPanel from "../CommunityStatsPanel";
+import type { Pin, CommunityQuality } from "../types/types";
 
 const DEFAULT_CENTER: [number, number] = [-114.0719, 51.0447];
 const CITY_BOUNDS: [mapboxgl.LngLatLike, mapboxgl.LngLatLike] = [
@@ -55,6 +56,14 @@ const MapView: FC = () => {
   const [selectedPin, setSelectedPin] =
     useState<Pin | GeoJSONFeature | null>(null);
   const [showReportForm, setShowReportForm] = useState(false);
+  const [communityPanel, setCommunityPanel] = useState<{
+    name: string;
+    coordinates: { lat: number; lon: number };
+  } | null>(null);
+  const [communityStats, setCommunityStats] =
+    useState<CommunityQuality | null>(null);
+  const [communityLoading, setCommunityLoading] = useState(false);
+  const [communityError, setCommunityError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchUser();
@@ -71,6 +80,30 @@ const MapView: FC = () => {
   const mapContainer = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+
+  const fetchCommunityStats = useCallback(async (lat: number, lon: number) => {
+    setCommunityLoading(true);
+    setCommunityError(null);
+    setCommunityStats(null);
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/api/city-quality?lat=${lat}&lng=${lon}`
+      );
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !data) {
+        const message =
+          (data && data.error) || "Unable to fetch community index.";
+        throw new Error(message);
+      }
+      setCommunityStats(data);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to load stats.";
+      setCommunityError(message);
+    } finally {
+      setCommunityLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     if (!mapContainer.current || mapRef.current) return;
@@ -130,7 +163,8 @@ const MapView: FC = () => {
             .setLngLat(pin.coordinates as any)
             .addTo(map);
 
-          marker.getElement().addEventListener("click", () => {
+          marker.getElement().addEventListener("click", (event) => {
+            event.stopPropagation();
             map.flyTo({
               center: pin.coordinates as any,
               zoom: 14,
@@ -139,6 +173,7 @@ const MapView: FC = () => {
             });
 
             setSelectedPin(pin);
+            setCommunityPanel(null);
           });
         });
 
@@ -189,6 +224,13 @@ const MapView: FC = () => {
           } catch (error) {
             console.error("Error sending community to backend:", error);
           }
+
+          setSelectedPin(null);
+          setCommunityPanel({
+            name,
+            coordinates: { lat: centroid[1], lon: centroid[0] },
+          });
+          fetchCommunityStats(centroid[1], centroid[0]);
         });
 
         map.on("mouseenter", "communities-fill", () => {
@@ -210,7 +252,7 @@ const MapView: FC = () => {
       map.remove();
       mapRef.current = null;
     };
-  }, []);
+  }, [fetchCommunityStats]);
 
   return (
     <div className="relative h-[100dvh] w-full bg-slate-900 text-white sm:h-screen">
@@ -240,9 +282,26 @@ const MapView: FC = () => {
           pin={selectedPin}
           onClose={() => {
             setSelectedPin(null);
+            setCommunityPanel(null);
           }}
           showReportButton={isLoggedIn}
           onOpenReport={() => setShowReportForm(true)}
+        />
+      )}
+      {communityPanel && (
+        <CommunityStatsPanel
+          communityName={communityPanel.name}
+          coordinates={communityPanel.coordinates}
+          stats={communityStats}
+          loading={communityLoading}
+          error={communityError}
+          onClose={() => {
+            setCommunityPanel(null);
+            setCommunityStats(null);
+            setCommunityError(null);
+          }}
+          onCreateReport={() => setShowReportForm(true)}
+          isLoggedIn={isLoggedIn}
         />
       )}
       <div ref={mapContainer} className="h-full w-full" />
