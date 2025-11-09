@@ -1,38 +1,17 @@
 @import "tailwindcss";
 
 html {
-	@apply text-gray-800;
-}
-
-:root {
-	font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont,
-		"Segoe UI", sans-serif;
-	line-height: 1.5;
-	font-weight: 400;
-
-	color-scheme: light dark;
-	background-color: #9a3e3e;
-
-	font-synthesis: none;
-	text-rendering: optimizeLegibility;
-	-webkit-font-smoothing: antialiased;
-	-moz-osx-font-smoothing: grayscale;
+  @apply text-gray-800;
 }
 
 * {
 	box-sizing: border-box;
 }
 
-body {
-	margin: 0;
+button{
+  cursor: pointer;
 }
 
-@media (prefers-color-scheme: light) {
-	:root {
-		color: #213547;
-		background-color: #ffffff;
-	}
-}
 
 /*  ------------------ Map PopUp CSS ------------------- */
 .mapboxgl-popup-content {
@@ -58,3 +37,218 @@ body {
 .mapboxgl-popup-tip {
 	border-top-color: rgba(255, 255, 255, 0.3) !important;
 }
+
+body {
+  margin: 0;
+  background-color: #000;
+}
+
+img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.overlay p {
+  text-transform: uppercase;
+  font-size: 0.7rem;
+}
+.overlay a {
+  text-decoration: none;
+  text-transform: uppercase;
+  font-size: 0.7rem;
+  color: #000;
+}
+
+.overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100svh;
+  padding: 2em;
+  background-color: #000;
+  color: #fff;
+  display: flex;
+  gap: 2em;
+  overflow: hidden;
+}
+
+.projects,
+.loader,
+.locations {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2em;
+}
+
+.loader {
+  align-items: center;
+  gap: 0;
+}
+
+.loader h1 {
+  text-align: center;
+  text-transform: uppercase;
+  font-size: 2.5rem;
+  font-style: italic;
+  line-height: 0.9;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  background-image: linear-gradient(0deg, #3a3a3a, #3a3a3a 50%, #fff 0);
+  background-size: 100% 200%;
+  background-position: 0% 100%;
+  color: #3a3a3a;
+}
+
+.projects-header,
+.project-item,
+.locations-header,
+.location-item {
+  display: flex;
+  gap: 2em;
+  opacity: 0;
+}
+
+.projects-header > *,
+.locations-header > * {
+  flex: 1;
+}
+
+.locations {
+  align-items: center;
+}
+
+.locations-header,
+.location-item {
+  width: 50%;
+}
+
+.project-item,
+.location-item {
+  color: #4f4f4f;
+}
+
+.image-grid {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, 50%);
+  width: 30%;
+  aspect-ratio: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1em;
+  z-index: 2;
+}
+
+.grid-row {
+  width: 100%;
+  display: flex;
+  gap: 1em;
+}
+
+.overlay .img {
+  position: relative;
+  flex: 1;
+  aspect-ratio: 1;
+  clip-path: polygon(0% 0%, 100% 0%, 100% 0%, 0% 0%);
+}
+/* 
+nav {
+  position: fixed;
+  width: 100vw;
+  padding: 1em;
+  display: flex;
+  gap: 2em;
+}
+
+nav > * {
+  flex: 1;
+}
+
+.links {
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+}
+
+.nav-logo {
+  text-align: center;
+  display: flex;
+  justify-content: center;
+}
+
+.nav-logo a {
+  font-size: 1.75rem;
+  font-weight: bolder;
+  font-style: italic;
+  line-height: 0.9;
+} */
+
+.banner-img {
+  position: absolute;
+  top: 45%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(0);
+  width: 20%;
+  aspect-ratio: 4/5;
+}
+
+.intro-copy {
+  position: absolute;
+  top: 45%;
+  transform: translate(-50%);
+  width: 100%;
+  padding: 0 8em;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.title {
+  position: absolute;
+  bottom: 10%;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.intro-copy h3,
+.title h1 {
+  position: relative;
+  text-transform: uppercase;
+  color: #000;
+  font-weight: 500;
+  font-style: italic;
+  line-height: 0.9;
+}
+
+.title h1 {
+  font-size: 3.5rem;
+}
+
+.intro-copy h3 {
+  font-size: 1.5rem;
+}
+
+.intro-copy h3,
+.title h1 {
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 0% 100%);
+}
+
+.intro-copy h3,
+.word,
+.title h1,
+.word {
+  display: inline-block;
+  position: relative;
+  will-change: transform;
+  margin-right: 0.1rem;
+}
+
+* {
+  box-sizing: border-box;
+}
+

@@ -1,7 +1,10 @@
 import type { ChangeEvent, FC, FormEvent } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import mapboxgl from "mapbox-gl";
+import mapboxgl, { Marker, type GeoJSONFeature } from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
+import { useUserStore } from "../../stores/userStore";
+import type { Pin } from "../types/types";
+import Sidebar from "../Sidebar";
 
 const DEFAULT_CENTER: [number, number] = [-114.0719, 51.0447];
 const CITY_BOUNDS: [mapboxgl.LngLatLike, mapboxgl.LngLatLike] = [
@@ -12,10 +15,51 @@ const CITY_BOUNDS: [mapboxgl.LngLatLike, mapboxgl.LngLatLike] = [
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN ?? "";
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:5000";
 
-const COMMUNITY_DATA_URL =
-  "https://data.calgary.ca/resource/surr-xmvs.geojson";
+const COMMUNITY_DATA_URL = "https://data.calgary.ca/resource/surr-xmvs.geojson";
+
+export const mockPins = [
+  {
+    id: 1,
+    title: "Community Center",
+    description: "This is a community center.",
+    coordinates: [-114.0719, 51.0447],
+    type: "info",
+  },
+  {
+    id: 2,
+    title: "Park",
+    description: "Nice park for kids.",
+    coordinates: [-114.058, 51.05],
+    type: "park",
+  },
+  {
+    id: 3,
+    title: "School",
+    description: "Nearby school.",
+    coordinates: [-114.065, 51.048],
+    type: "school",
+  },
+  {
+    id: 4,
+    title: "Restaurant",
+    description: "Good food here.",
+    coordinates: [-114.072, 51.046],
+    type: "food",
+  },
+];
 
 const MapView: FC = () => {
+  const { user, fetchUser } = useUserStore();
+
+  const [selectedPin, setSelectedPin] = useState<Pin | GeoJSONFeature | null>(null);
+
+  useEffect(() => {
+    fetchUser();
+  }, []);
+
+  const isAdmin = user?.status === "admin";
+  console.log("isAdmin", isAdmin);
+
   const mapContainer = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -107,9 +151,31 @@ const MapView: FC = () => {
           },
         });
 
+        // PINSSSS
+        mockPins.forEach((pin) => {
+          const marker = new mapboxgl.Marker({
+            color: pin.type === "park" ? "green" : "red",
+          })
+            .setLngLat(pin.coordinates as any)
+            .addTo(map);
+
+          marker.getElement().addEventListener("click", () => {
+            map.flyTo({
+              center: pin.coordinates as any,
+              zoom: 14,
+              speed: 1.2,
+              curve: 1.4,
+            });
+
+            setSelectedPin(pin);
+          });
+        });
+
+        // On click: show popup with name and centroid
         map.on("click", "communities-fill", async (e) => {
           const feature = e.features?.[0];
           if (!feature) return;
+          
 
           const props = feature.properties || {};
           const name =
@@ -309,6 +375,13 @@ const MapView: FC = () => {
           <p className="mt-1 text-xs text-slate-500">Map: {statusMessage}</p>
         )}
       </div>
+
+      <Sidebar
+        pin={selectedPin}
+        onClose={() => {
+          setSelectedPin(null);
+        }}
+      />
       <div ref={mapContainer} className="h-full w-full" />
     </div>
   );
